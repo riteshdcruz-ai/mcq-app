@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("resource") // "admin" | "resource"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  uploadedBooks Book[]
+  createdTests  Test[]
+  assignments   TestAssignment[]
+  attempts      TestAttempt[]
+}
+
+model Book {
+  id            String   @id @default(cuid())
+  title         String
+  filename      String
+  filePath      String
+  extractedText String   @default("")
+  createdAt     DateTime @default(now())
+  uploadedById  String
+  uploadedBy    User     @relation(fields: [uploadedById], references: [id])
+
+  questions Question[]
+}
+
+model Question {
+  id            String   @id @default(cuid())
+  bookId        String
+  book          Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  questionText  String
+  optionA       String
+  optionB       String
+  optionC       String
+  optionD       String
+  correctOption String   // "A" | "B" | "C" | "D"
+  explanation   String   @default("")
+  difficulty    String   @default("medium") // "easy" | "medium" | "hard"
+  aiGenerated   Boolean  @default(false)
+  approved      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  testQuestions TestQuestion[]
+  answers       TestAttemptAnswer[]
+}
+
+model Test {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @default("")
+  timeLimit   Int       @default(30) // minutes
+  randomMode  Boolean   @default(false)
+  randomCount Int       @default(60)
+  published       Boolean   @default(false)
+  allowRetake     Boolean   @default(false)
+  passPercentage  Int       @default(60)
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+  createdById String
+  createdBy   User      @relation(fields: [createdById], references: [id])
+
+  testQuestions TestQuestion[]
+  assignments   TestAssignment[]
+  attempts      TestAttempt[]
+}
+
+model TestQuestion {
+  id         String   @id @default(cuid())
+  testId     String
+  test       Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order      Int
+
+  @@unique([testId, questionId])
+}
+
+model TestAssignment {
+  id         String   @id @default(cuid())
+  testId     String
+  test       Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  userId     String?  // null = all users
+  user       User?    @relation(fields: [userId], references: [id])
+  assignedAt DateTime @default(now())
+}
+
+model TestAttempt {
+  id             String    @id @default(cuid())
+  testId         String
+  test           Test      @relation(fields: [testId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  startedAt      DateTime  @default(now())
+  submittedAt    DateTime?
+  score          Int       @default(0)
+  totalQuestions Int       @default(0)
+  status         String    @default("in_progress") // "in_progress" | "submitted"
+
+  answers TestAttemptAnswer[]
+}
+
+model TestAttemptAnswer {
+  id             String      @id @default(cuid())
+  attemptId      String
+  attempt        TestAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId     String
+  question       Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption String?     // "A" | "B" | "C" | "D" | null (skipped)
+}
