@@ -4,6 +4,8 @@ import Nav from "@/components/Nav";
 
 type Attempt = {
   id: string;
+  userId: string;
+  testId: string;
   score: number;
   totalQuestions: number;
   submittedAt: string;
@@ -16,15 +18,22 @@ export default function AdminResultsPage() {
   const [me, setMe] = useState<{ name: string } | null>(null);
   const [filter, setFilter] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [permissions, setPermissions] = useState<Set<string>>(new Set());
 
   async function fetchResults() {
     const data = await fetch("/api/admin/results").then((r) => r.json());
     setResults(data);
   }
 
+  async function fetchPermissions() {
+    const data: { userId: string; testId: string }[] = await fetch("/api/admin/retake-permissions").then((r) => r.json());
+    setPermissions(new Set(data.map((p) => `${p.userId}:${p.testId}`)));
+  }
+
   useEffect(() => {
     fetch("/api/auth/me").then((r) => r.json()).then((d) => setMe(d.user));
     fetchResults();
+    fetchPermissions();
   }, []);
 
   async function deleteResult(id: string, name: string) {
@@ -35,6 +44,24 @@ export default function AdminResultsPage() {
       body: JSON.stringify({ id }),
     });
     fetchResults();
+  }
+
+  async function grantRetake(userId: string, testId: string) {
+    await fetch("/api/admin/retake-permissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, testId }),
+    });
+    fetchPermissions();
+  }
+
+  async function revokeRetake(userId: string, testId: string) {
+    await fetch("/api/admin/retake-permissions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, testId }),
+    });
+    fetchPermissions();
   }
 
   async function exportXlsx() {
@@ -110,13 +137,16 @@ export default function AdminResultsPage() {
                 <th className="px-6 py-3 text-left">%</th>
                 <th className="px-6 py-3 text-left">Result</th>
                 <th className="px-6 py-3 text-left">Submitted</th>
+                <th className="px-6 py-3 text-left">Retake</th>
                 <th className="px-6 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((r) => {
                 const pct = r.totalQuestions > 0 ? Math.round((r.score / r.totalQuestions) * 100) : 0;
-                const passed = pct >= (r.test.passPercentage ?? 60);
+                const isPassed = pct >= (r.test.passPercentage ?? 60);
+                const retakeKey = `${r.userId}:${r.testId}`;
+                const retakeGranted = permissions.has(retakeKey);
                 return (
                   <tr key={r.id} className="border-b border-gray-50 hover:bg-gray-50">
                     <td className="px-6 py-3 font-medium text-gray-800">{r.user.name}</td>
@@ -125,11 +155,29 @@ export default function AdminResultsPage() {
                     <td className="px-6 py-3 text-gray-700">{r.score}/{r.totalQuestions}</td>
                     <td className="px-6 py-3 font-semibold text-gray-700">{pct}%</td>
                     <td className="px-6 py-3">
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${passed ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                        {passed ? "Pass" : "Fail"}
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isPassed ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                        {isPassed ? "Pass" : "Fail"}
                       </span>
                     </td>
                     <td className="px-6 py-3 text-gray-400 text-xs">{r.submittedAt ? new Date(r.submittedAt).toLocaleString() : ""}</td>
+                    <td className="px-6 py-3">
+                      {retakeGranted ? (
+                        <button
+                          onClick={() => revokeRetake(r.userId, r.testId)}
+                          className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 hover:bg-blue-200 transition"
+                          title="Click to revoke"
+                        >
+                          Granted
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => grantRetake(r.userId, r.testId)}
+                          className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-700 transition"
+                        >
+                          Allow
+                        </button>
+                      )}
+                    </td>
                     <td className="px-6 py-3 text-right">
                       <button
                         onClick={() => deleteResult(r.id, r.user.name)}
@@ -142,7 +190,7 @@ export default function AdminResultsPage() {
                 );
               })}
               {filtered.length === 0 && (
-                <tr><td colSpan={8} className="text-center text-gray-400 py-10">No results found.</td></tr>
+                <tr><td colSpan={9} className="text-center text-gray-400 py-10">No results found.</td></tr>
               )}
             </tbody>
           </table>

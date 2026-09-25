@@ -17,21 +17,29 @@ export default async function DashboardPage() {
   if (!session) redirect("/login");
   if (session.role === "admin") redirect("/admin");
 
-  const tests = await prisma.test.findMany({
-    where: {
-      published: true,
-      assignments: { some: { OR: [{ userId: session.userId }, { userId: null }] } },
-    },
-    include: {
-      _count: { select: { testQuestions: true } },
-      attempts: {
-        where: { userId: session.userId },
-        select: { id: true, status: true, score: true, totalQuestions: true, submittedAt: true },
-        orderBy: { startedAt: "desc" },
+  const [tests, retakePerms] = await Promise.all([
+    prisma.test.findMany({
+      where: {
+        published: true,
+        assignments: { some: { OR: [{ userId: session.userId }, { userId: null }] } },
       },
-    },
-    orderBy: { publishedAt: "desc" },
-  });
+      include: {
+        _count: { select: { testQuestions: true } },
+        attempts: {
+          where: { userId: session.userId },
+          select: { id: true, status: true, score: true, totalQuestions: true, submittedAt: true },
+          orderBy: { startedAt: "desc" },
+        },
+      },
+      orderBy: { publishedAt: "desc" },
+    }),
+    prisma.userTestRetakePermission.findMany({
+      where: { userId: session.userId },
+      select: { testId: true },
+    }),
+  ]);
+
+  const retakeGrantedSet = new Set(retakePerms.map((p) => p.testId));
 
   // Latest attempt determines pending vs completed; tests with an active retake appear in pending
   const submitted = tests.filter((t) => t.attempts[0]?.status === "submitted");
@@ -66,7 +74,7 @@ export default async function DashboardPage() {
             <h2 className="text-lg font-semibold text-gray-700 mb-3">Completed Tests</h2>
             <div className="space-y-3">
               {submitted.map((t) => (
-                <CompletedCard key={t.id} test={t} />
+                <CompletedCard key={t.id} test={t} retakeGranted={retakeGrantedSet.has(t.id)} />
               ))}
             </div>
           </section>
@@ -110,7 +118,7 @@ function TestCard({ test }: { test: { id: string; title: string; description: st
   );
 }
 
-function CompletedCard({ test }: { test: { id: string; title: string; allowRetake: boolean; attempts: AttemptSummary[] } }) {
+function CompletedCard({ test, retakeGranted }: { test: { id: string; title: string; allowRetake: boolean; attempts: AttemptSummary[] }; retakeGranted: boolean }) {
   // Show only submitted attempts, oldest first for sequential numbering
   const submittedAttempts = [...test.attempts.filter((a) => a.status === "submitted")].reverse();
 
@@ -118,7 +126,7 @@ function CompletedCard({ test }: { test: { id: string; title: string; allowRetak
     <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-gray-800">{test.title}</h3>
-        {test.allowRetake && (
+        {(test.allowRetake || retakeGranted) && (
           <Link
             href={`/tests/${test.id}`}
             className="text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline transition"
