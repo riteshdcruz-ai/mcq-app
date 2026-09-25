@@ -84,7 +84,18 @@ export async function POST(
       const prior = await prisma.testAttempt.findFirst({
         where: { testId, userId: session.userId, status: "submitted" },
       });
-      if (prior) return NextResponse.json({ error: "Retake not allowed" }, { status: 403 });
+      if (prior) {
+        const permission = await prisma.userTestRetakePermission.findUnique({
+          where: { userId_testId: { userId: session.userId, testId } },
+        });
+        if (!permission) {
+          return NextResponse.json({ error: "Retake not allowed" }, { status: 403 });
+        }
+        // Consume the one-time permission
+        await prisma.userTestRetakePermission.delete({
+          where: { userId_testId: { userId: session.userId, testId } },
+        });
+      }
     }
 
     let selectedQuestionIds: string[];
