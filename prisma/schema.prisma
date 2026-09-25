@@ -130,4 +130,5 @@ model TestAttemptAnswer {
   questionId     String
   question       Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
   selectedOption String?     // "A" | "B" | "C" | "D" | null (skipped)
+  manualOverride Boolean     @default(false)
 }

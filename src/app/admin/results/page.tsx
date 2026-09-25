@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Nav from "@/components/Nav";
 
 type Attempt = {
@@ -179,12 +180,20 @@ export default function AdminResultsPage() {
                       )}
                     </td>
                     <td className="px-6 py-3 text-right">
-                      <button
-                        onClick={() => deleteResult(r.id, r.user.name)}
-                        className="text-red-400 hover:text-red-600 text-xs font-medium"
-                      >
-                        Delete
-                      </button>
+                      <div className="flex items-center justify-end gap-3">
+                        <Link
+                          href={`/admin/results/${r.id}`}
+                          className="text-blue-500 hover:text-blue-700 text-xs font-medium"
+                        >
+                          Review
+                        </Link>
+                        <button
+                          onClick={() => deleteResult(r.id, r.user.name)}
+                          className="text-red-400 hover:text-red-600 text-xs font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
