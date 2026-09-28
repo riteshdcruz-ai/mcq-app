@@ -127,9 +127,9 @@ export default function AdminResultsPage() {
         />
 
         {/* Table */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-auto max-h-[65vh]">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-gray-100 bg-gray-50 text-gray-400 text-xs uppercase">
                 <th className="px-6 py-3 text-left">Name</th>
                 <th className="px-6 py-3 text-left">Email</th>
