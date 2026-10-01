@@ -25,6 +25,7 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
   const [loading, setLoading] = useState(true);
   const [warnings, setWarnings] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
   const warningsRef = useRef(0);
   const submitRef = useRef<() => void>(() => {});
 
@@ -41,12 +42,10 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
 
   useEffect(() => {
     async function init() {
-      // 1. Get test info (title, timeLimit)
       const testRes = await fetch(`/api/tests/${id}`);
       const testData = await testRes.json();
       setTestTitle(testData.title);
 
-      // 2. Start (or resume) the attempt — this creates random questions if needed
       const startRes = await fetch(`/api/tests/${id}/attempt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -57,7 +56,6 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
         return;
       }
 
-      // 3. Fetch attempt with full question details
       const attemptRes = await fetch(`/api/tests/${id}/attempt`);
       const attemptData = await attemptRes.json();
 
@@ -66,12 +64,10 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
         return;
       }
 
-      // Calculate remaining time based on when the attempt actually started
       const elapsed = Math.floor((Date.now() - new Date(attemptData.startedAt).getTime()) / 1000);
       const remaining = Math.max(1, testData.timeLimit * 60 - elapsed);
       setTimeLeft(remaining);
 
-      // Build question list from attempt answers (works for both random and fixed tests)
       const qs: Question[] = attemptData.answers.map(
         (a: { question: Question; selectedOption: string | null }) => a.question
       );
@@ -89,10 +85,8 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
     init();
   }, [id]);
 
-  // Keep submitRef current so the visibility handler never captures a stale closure
   useEffect(() => { submitRef.current = submit; }, [submit]);
 
-  // Warn on tab switch / window hide; auto-submit after 3 violations
   useEffect(() => {
     if (loading) return;
     const handleVisibility = () => {
@@ -155,7 +149,6 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="bg-blue-900 text-white px-4 py-3 flex items-center justify-between shadow">
         <span className="font-semibold">{testTitle}</span>
         <div className="flex items-center gap-4 text-sm">
@@ -171,7 +164,6 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
         </div>
       </div>
 
-      {/* Tab-switch warning banner */}
       {showWarning && (
         <div className={`px-4 py-2.5 flex items-center justify-between text-sm ${warnings >= 3 ? "bg-red-600 text-white" : "bg-orange-50 border-b border-orange-200 text-orange-800"}`}>
           <span className="font-medium">
@@ -190,7 +182,6 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
       )}
 
       <div className="max-w-3xl mx-auto px-4 py-8 flex gap-6">
-        {/* Question panel */}
         <div className="flex-1">
           <p className="text-xs text-gray-400 mb-2">Question {current + 1} of {questions.length}</p>
           <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm mb-4">
@@ -237,26 +228,19 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
             >
               Previous
             </button>
-            {current < questions.length - 1 ? (
-              <button
-                onClick={() => setCurrent((c) => c + 1)}
-                className="px-5 py-2 rounded-lg bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 transition"
-              >
-                Next
-              </button>
-            ) : (
-              <button
-                onClick={submit}
-                disabled={submitting}
-                className="px-5 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition disabled:opacity-60"
-              >
-                {submitting ? "Submitting..." : "Submit Test"}
-              </button>
-            )}
+            <button
+              onClick={() => setCurrent((c) => c + 1)}
+              disabled={current === questions.length - 1}
+              className="px-5 py-2 rounded-lg bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 transition disabled:opacity-40"
+            >
+              Next
+            </button>
           </div>
+          {current === questions.length - 1 && (
+            <p className="text-center text-xs text-gray-400 mt-3">Last question — use the Submit button on the right when ready.</p>
+          )}
         </div>
 
-        {/* Question map */}
         <div className="w-44 shrink-0">
           <p className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">Questions</p>
           <div className="grid grid-cols-5 gap-1.5">
@@ -277,14 +261,43 @@ export default function TakeTestPage({ params }: { params: Promise<{ id: string 
             ))}
           </div>
           <button
-            onClick={submit}
+            onClick={() => setShowConfirmModal(true)}
             disabled={submitting}
-            className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-2 rounded-lg transition disabled:opacity-60"
+            className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold py-2.5 rounded-lg transition disabled:opacity-60 border-2 border-green-700"
           >
-            Submit
+            {submitting ? "Submitting..." : "Submit Test"}
           </button>
         </div>
       </div>
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+            <h3 className="text-lg font-bold text-gray-800 mb-3">Submit Test?</h3>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Are you sure you want to submit the test? You will not be able to make any changes post submission.
+            </p>
+            <div className="mt-2 text-xs text-gray-400">
+              {answered}/{questions.length} questions answered.
+            </div>
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { setShowConfirmModal(false); submit(); }}
+                disabled={submitting}
+                className="px-5 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition disabled:opacity-60"
+              >
+                {submitting ? "Submitting..." : "Yes, Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

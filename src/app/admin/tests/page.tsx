@@ -15,6 +15,10 @@ export default function AdminTestsPage() {
   const [form, setForm] = useState({ title: "", description: "", timeLimit: 30, passPercentage: 60, assignToAll: true, assignedUserIds: [] as string[], questionIds: [] as string[], randomCount: 60 });
   const [saving, setSaving] = useState(false);
   const [randomMode, setRandomMode] = useState(false);
+  const [assigningTest, setAssigningTest] = useState<Test | null>(null);
+  const [assignForm, setAssignForm] = useState<{ assignedToAll: boolean; userIds: string[] }>({ assignedToAll: true, userIds: [] });
+  const [assignSaving, setAssignSaving] = useState(false);
+  const [assignFilter, setAssignFilter] = useState("");
 
   async function fetchAll() {
     const [t, u, q] = await Promise.all([
@@ -66,6 +70,33 @@ export default function AdminTestsPage() {
 
   function toggleUser(uid: string) {
     setForm((f) => ({ ...f, assignedUserIds: f.assignedUserIds.includes(uid) ? f.assignedUserIds.filter((x) => x !== uid) : [...f.assignedUserIds, uid] }));
+  }
+
+  async function openAssignModal(test: Test) {
+    const data = await fetch(`/api/admin/tests/${test.id}/assignments`).then((r) => r.json());
+    setAssignForm(data);
+    setAssignFilter("");
+    setAssigningTest(test);
+  }
+
+  async function saveAssignments() {
+    if (!assigningTest) return;
+    setAssignSaving(true);
+    await fetch(`/api/admin/tests/${assigningTest.id}/assignments`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignToAll: assignForm.assignedToAll, userIds: assignForm.userIds }),
+    });
+    setAssignSaving(false);
+    setAssigningTest(null);
+    fetchAll();
+  }
+
+  function toggleAssignUser(uid: string) {
+    setAssignForm((f) => ({
+      ...f,
+      userIds: f.userIds.includes(uid) ? f.userIds.filter((x) => x !== uid) : [...f.userIds, uid],
+    }));
   }
 
   async function createTest(e: React.FormEvent) {
@@ -152,6 +183,7 @@ export default function AdminTestsPage() {
                     </button>
                   </td>
                   <td className="px-6 py-3 text-right flex gap-3 justify-end">
+                    <button onClick={() => openAssignModal(t)} className="text-blue-500 hover:text-blue-700 text-xs font-medium">Assign</button>
                     <button onClick={() => togglePublish(t)} className={`text-xs font-medium ${t.published ? "text-orange-500 hover:text-orange-700" : "text-green-600 hover:text-green-800"}`}>
                       {t.published ? "Unpublish" : "Publish"}
                     </button>
@@ -166,6 +198,60 @@ export default function AdminTestsPage() {
           </table>
         </div>
       </main>
+
+      {/* Assign modal */}
+      {assigningTest && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto">
+            <h3 className="font-bold text-gray-800 text-lg mb-1">Assign Users</h3>
+            <p className="text-sm text-gray-500 mb-4">{assigningTest.title}</p>
+
+            <label className="flex items-center gap-2 text-sm cursor-pointer mb-3 font-medium">
+              <input type="checkbox" checked={assignForm.assignedToAll}
+                onChange={(e) => setAssignForm((f) => ({ ...f, assignedToAll: e.target.checked, userIds: [] }))}
+                className="rounded" />
+              Assign to all users
+            </label>
+
+            {!assignForm.assignedToAll && (
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gray-600">{assignForm.userIds.length} selected</span>
+                  <div className="flex gap-3 text-xs">
+                    <button onClick={() => setAssignForm((f) => ({ ...f, userIds: users.map((u) => u.id) }))} className="text-blue-600 hover:underline">Select all</button>
+                    <button onClick={() => setAssignForm((f) => ({ ...f, userIds: [] }))} className="text-gray-500 hover:underline">Clear</button>
+                  </div>
+                </div>
+                <input
+                  placeholder="Search users..."
+                  value={assignFilter}
+                  onChange={(e) => setAssignFilter(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <div className="border border-gray-200 rounded-lg p-3 max-h-64 overflow-y-auto space-y-1">
+                  {users
+                    .filter((u) => !assignFilter || u.name.toLowerCase().includes(assignFilter.toLowerCase()) || u.email.toLowerCase().includes(assignFilter.toLowerCase()))
+                    .map((u) => (
+                      <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer py-0.5">
+                        <input type="checkbox" checked={assignForm.userIds.includes(u.id)} onChange={() => toggleAssignUser(u.id)} className="rounded" />
+                        <span className="text-gray-800">{u.name}</span>
+                        <span className="text-gray-400 text-xs">{u.email}</span>
+                      </label>
+                    ))}
+                  {users.length === 0 && <p className="text-gray-400 text-xs">No users found.</p>}
+                </div>
+              </>
+            )}
+
+            <div className="flex gap-2 justify-end mt-5">
+              <button onClick={() => setAssigningTest(null)} className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={saveAssignments} disabled={assignSaving} className="px-5 py-2 rounded-lg bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
+                {assignSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create modal */}
       {creating && (
