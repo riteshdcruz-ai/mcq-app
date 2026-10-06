@@ -16,6 +16,12 @@ export default function AdminUsersPage() {
   const [resetError, setResetError] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
 
+  // Edit user state
+  const [editTarget, setEditTarget] = useState<User | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", email: "" });
+  const [editError, setEditError] = useState("");
+  const [editLoading, setEditLoading] = useState(false);
+
   // Bulk add state
   const [showBulk, setShowBulk] = useState(false);
   const [bulkText, setBulkText] = useState("");
@@ -83,13 +89,11 @@ export default function AdminUsersPage() {
     setBulkLoading(true);
     setBulkResult(null);
 
-    // Parse textarea: each line is "Full Name, email@example.com" or tab-separated
     const rows = bulkText
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        // Support tab (Excel paste) or comma separation
         const sep = line.includes("\t") ? "\t" : ",";
         const parts = line.split(sep).map((p) => p.trim());
         return { name: parts[0] || "", email: parts[1] || "" };
@@ -107,6 +111,27 @@ export default function AdminUsersPage() {
     setBulkResult(data);
     setBulkLoading(false);
     if (data.created > 0) { setBulkText(""); fetchUsers(); }
+  }
+
+  async function submitEditUser(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editTarget) return;
+    setEditError("");
+    setEditLoading(true);
+    const res = await fetch("/api/admin/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editTarget.id, name: editForm.name, email: editForm.email }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setEditError(data.error || "Failed to update user");
+      setEditLoading(false);
+      return;
+    }
+    setEditTarget(null);
+    setEditLoading(false);
+    fetchUsers();
   }
 
   async function submitResetPassword(e: React.FormEvent) {
@@ -207,7 +232,6 @@ export default function AdminUsersPage() {
                 </div>
               </form>
 
-              {/* Results */}
               {bulkResult && (
                 <div className={`mt-4 rounded-lg px-4 py-3 text-sm ${bulkResult.errors.length > 0 ? "bg-amber-50 border border-amber-200" : "bg-green-50 border border-green-200"}`}>
                   <p className="font-semibold text-gray-700 mb-1">
@@ -259,6 +283,12 @@ export default function AdminUsersPage() {
                   <td className="px-6 py-3 text-gray-400">{new Date(u.createdAt).toLocaleDateString()}</td>
                   <td className="px-6 py-3 text-right flex items-center justify-end gap-3">
                     <button
+                      onClick={() => { setEditTarget(u); setEditForm({ name: u.name, email: u.email }); setEditError(""); }}
+                      className="text-gray-500 hover:text-gray-800 text-xs font-medium whitespace-nowrap"
+                    >
+                      Edit
+                    </button>
+                    <button
                       onClick={() => { setResetTarget({ id: u.id, name: u.name }); setNewPassword(""); setResetError(""); }}
                       className="text-blue-500 hover:text-blue-700 text-xs font-medium whitespace-nowrap"
                     >
@@ -280,6 +310,54 @@ export default function AdminUsersPage() {
           </table>
         </div>
       </main>
+
+      {/* Edit User Modal */}
+      {editTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">Edit User</h3>
+            <p className="text-sm text-gray-500 mb-4">Update name or email address</p>
+            {editError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm mb-3">{editError}</div>
+            )}
+            <form onSubmit={submitEditUser} className="space-y-3">
+              <input
+                autoFocus
+                type="text"
+                placeholder="Full Name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="email"
+                placeholder="Email address"
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                required
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  type="button"
+                  onClick={() => setEditTarget(null)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="px-4 py-2 text-sm bg-blue-700 hover:bg-blue-800 text-white rounded-lg font-medium transition disabled:opacity-60"
+                >
+                  {editLoading ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Reset Password Modal */}
       {resetTarget && (

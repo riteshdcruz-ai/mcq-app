@@ -78,7 +78,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { id, password, role } = await req.json();
+  const { id, password, role, name, email } = await req.json();
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
   const data: Record<string, unknown> = {};
@@ -93,6 +93,17 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Invalid role" }, { status: 400 });
     }
     data.role = role;
+  }
+  if (name !== undefined) {
+    if (!name.trim()) return NextResponse.json({ error: "Name cannot be empty" }, { status: 400 });
+    data.name = name.trim();
+  }
+  if (email !== undefined) {
+    const normalised = email.toLowerCase().trim();
+    if (!normalised) return NextResponse.json({ error: "Email cannot be empty" }, { status: 400 });
+    const conflict = await prisma.user.findFirst({ where: { email: normalised, NOT: { id } } });
+    if (conflict) return NextResponse.json({ error: "Email already in use" }, { status: 409 });
+    data.email = normalised;
   }
 
   if (Object.keys(data).length === 0) {
@@ -119,7 +130,6 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    // Gather IDs to drive cascade order (SQLite needs explicit ordering)
     const [userBooks, userTests, userAttempts] = await Promise.all([
       prisma.book.findMany({ where: { uploadedById: id }, select: { id: true } }),
       prisma.test.findMany({ where: { createdById: id }, select: { id: true } }),
@@ -141,35 +151,26 @@ export async function DELETE(req: NextRequest) {
     const testAttemptIds = testAttempts.map((a) => a.id);
 
     await prisma.$transaction(async (tx) => {
-      // 1. Remove answers referencing questions from this user's books (other users' attempts)
       if (questionIds.length) {
         await tx.testAttemptAnswer.deleteMany({ where: { questionId: { in: questionIds } } });
       }
-      // 2. Remove answers for other users' attempts on this user's tests (cascade handles the rest)
       if (testAttemptIds.length) {
         await tx.testAttemptAnswer.deleteMany({ where: { attemptId: { in: testAttemptIds } } });
       }
-      // 3. Remove answers for this user's own attempts
       if (ownAttemptIds.length) {
         await tx.testAttemptAnswer.deleteMany({ where: { attemptId: { in: ownAttemptIds } } });
       }
-      // 4. Delete attempts on this user's tests
       if (testIds.length) {
         await tx.testAttempt.deleteMany({ where: { testId: { in: testIds } } });
       }
-      // 5. Delete this user's attempts
       await tx.testAttempt.deleteMany({ where: { userId: id } });
-      // 6. Delete this user's individual assignments
       await tx.testAssignment.deleteMany({ where: { userId: id } });
-      // 7. Delete books → cascades Questions → cascades TestQuestions
       if (bookIds.length) {
         await tx.book.deleteMany({ where: { id: { in: bookIds } } });
       }
-      // 8. Delete tests → cascades TestQuestions and TestAssignments
       if (testIds.length) {
         await tx.test.deleteMany({ where: { id: { in: testIds } } });
       }
-      // 9. Delete the user
       await tx.user.delete({ where: { id } });
     });
 
