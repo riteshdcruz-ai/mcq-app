@@ -34,6 +34,17 @@ model Book {
   uploadedBy    User     @relation(fields: [uploadedById], references: [id])
 
   questions Question[]
+  testBooks TestBook[]
+}
+
+model TestBook {
+  id     String @id @default(cuid())
+  testId String
+  test   Test   @relation(fields: [testId], references: [id], onDelete: Cascade)
+  bookId String
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, bookId])
 }
 
 model Question {
@@ -57,21 +68,23 @@ model Question {
 }
 
 model Test {
-  id          String    @id @default(cuid())
-  title       String
-  description String    @default("")
-  timeLimit   Int       @default(30) // minutes
-  randomMode  Boolean   @default(false)
-  randomCount Int       @default(60)
-  published       Boolean   @default(false)
-  allowRetake     Boolean   @default(false)
-  passPercentage  Int       @default(60)
-  createdAt   DateTime  @default(now())
-  publishedAt DateTime?
-  createdById String
-  createdBy   User      @relation(fields: [createdById], references: [id])
+  id               String    @id @default(cuid())
+  title            String
+  description      String    @default("")
+  timeLimit        Int       @default(30) // minutes
+  randomMode       Boolean   @default(false)
+  randomCount      Int       @default(60)
+  randomSourceType String    @default("all") // "all" | "books" | "questions"
+  published        Boolean   @default(false)
+  allowRetake      Boolean   @default(false)
+  passPercentage   Int       @default(60)
+  createdAt        DateTime  @default(now())
+  publishedAt      DateTime?
+  createdById      String
+  createdBy        User      @relation(fields: [createdById], references: [id])
 
   testQuestions     TestQuestion[]
+  testBooks         TestBook[]
   assignments       TestAssignment[]
   attempts          TestAttempt[]
   retakePermissions UserTestRetakePermission[]

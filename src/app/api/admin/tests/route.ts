@@ -24,8 +24,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { title, description, timeLimit, questionIds, assignToAll, assignedUserIds, randomMode, randomCount, passPercentage } =
+  const { title, description, timeLimit, questionIds, bookIds, assignToAll, assignedUserIds, randomMode, randomCount, randomSourceType, passPercentage } =
     await req.json();
+
+  const source = randomSourceType ?? "all";
 
   const test = await prisma.test.create({
     data: {
@@ -34,16 +36,22 @@ export async function POST(req: NextRequest) {
       timeLimit: timeLimit || 30,
       randomMode: randomMode ?? false,
       randomCount: randomCount ?? 60,
+      randomSourceType: randomMode ? source : "all",
       passPercentage: passPercentage ?? 60,
       createdById: session.userId,
-      testQuestions: randomMode
-        ? undefined
-        : {
-            create: (questionIds as string[]).map((qId: string, index: number) => ({
+      testQuestions: (!randomMode || source === "questions")
+        ? {
+            create: (questionIds as string[] ?? []).map((qId: string, index: number) => ({
               questionId: qId,
               order: index + 1,
             })),
-          },
+          }
+        : undefined,
+      testBooks: (randomMode && source === "books")
+        ? {
+            create: (bookIds as string[] ?? []).map((bId: string) => ({ bookId: bId })),
+          }
+        : undefined,
       assignments: assignToAll
         ? { create: [{ userId: null }] }
         : {

@@ -76,7 +76,7 @@ export async function POST(
     // No in-progress attempt — check retake permission before creating a new one
     const test = await prisma.test.findUnique({
       where: { id: testId },
-      include: { testQuestions: true },
+      include: { testQuestions: true, testBooks: true },
     });
     if (!test) return NextResponse.json({ error: "Test not found" }, { status: 404 });
 
@@ -101,8 +101,14 @@ export async function POST(
     let selectedQuestionIds: string[];
 
     if (test.randomMode) {
+      const poolWhere: Record<string, unknown> = { approved: true };
+      if (test.randomSourceType === "books" && test.testBooks.length > 0) {
+        poolWhere.bookId = { in: test.testBooks.map((tb) => tb.bookId) };
+      } else if (test.randomSourceType === "questions" && test.testQuestions.length > 0) {
+        poolWhere.id = { in: test.testQuestions.map((tq) => tq.questionId) };
+      }
       const pool = await prisma.question.findMany({
-        where: { approved: true },
+        where: poolWhere,
         select: { id: true, difficulty: true },
       });
 

@@ -5,14 +5,16 @@ import Nav from "@/components/Nav";
 type Test = { id: string; title: string; description: string; timeLimit: number; randomMode: boolean; randomCount: number; published: boolean; allowRetake: boolean; passPercentage: number; createdAt: string; createdBy: { name: string }; _count: { testQuestions: number; attempts: number } };
 type User = { id: string; name: string; email: string; role: string };
 type Question = { id: string; questionText: string; book: { title: string }; approved: boolean };
+type Book = { id: string; title: string };
 
 export default function AdminTestsPage() {
   const [tests, setTests] = useState<Test[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
   const [me, setMe] = useState<{ name: string } | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", timeLimit: 30, passPercentage: 60, assignToAll: true, assignedUserIds: [] as string[], questionIds: [] as string[], randomCount: 60 });
+  const [form, setForm] = useState({ title: "", description: "", timeLimit: 30, passPercentage: 60, assignToAll: true, assignedUserIds: [] as string[], questionIds: [] as string[], bookIds: [] as string[], randomCount: 60, randomSourceType: "all" as "all" | "books" | "questions" });
   const [saving, setSaving] = useState(false);
   const [randomMode, setRandomMode] = useState(false);
   const [assigningTest, setAssigningTest] = useState<Test | null>(null);
@@ -21,14 +23,16 @@ export default function AdminTestsPage() {
   const [assignFilter, setAssignFilter] = useState("");
 
   async function fetchAll() {
-    const [t, u, q] = await Promise.all([
+    const [t, u, q, b] = await Promise.all([
       fetch("/api/admin/tests").then((r) => r.json()),
       fetch("/api/admin/users").then((r) => r.json()),
       fetch("/api/admin/questions").then((r) => r.json()),
+      fetch("/api/admin/books").then((r) => r.json()),
     ]);
     setTests(t);
     setUsers(u.filter((u: User) => u.role === "resource"));
     setQuestions(q.filter((q: Question) => q.approved));
+    setBooks(b);
   }
 
   useEffect(() => {
@@ -68,6 +72,10 @@ export default function AdminTestsPage() {
     setForm((f) => ({ ...f, questionIds: f.questionIds.includes(qId) ? f.questionIds.filter((x) => x !== qId) : [...f.questionIds, qId] }));
   }
 
+  function toggleBook(bId: string) {
+    setForm((f) => ({ ...f, bookIds: f.bookIds.includes(bId) ? f.bookIds.filter((x) => x !== bId) : [...f.bookIds, bId] }));
+  }
+
   function toggleUser(uid: string) {
     setForm((f) => ({ ...f, assignedUserIds: f.assignedUserIds.includes(uid) ? f.assignedUserIds.filter((x) => x !== uid) : [...f.assignedUserIds, uid] }));
   }
@@ -102,15 +110,17 @@ export default function AdminTestsPage() {
   async function createTest(e: React.FormEvent) {
     e.preventDefault();
     if (!randomMode && form.questionIds.length === 0) return alert("Select at least one question, or enable Random Mode");
+    if (randomMode && form.randomSourceType === "books" && form.bookIds.length === 0) return alert("Select at least one book for the question pool");
+    if (randomMode && form.randomSourceType === "questions" && form.questionIds.length === 0) return alert("Select at least one question for the pool");
     setSaving(true);
     await fetch("/api/admin/tests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, randomMode, randomCount: form.randomCount }),
+      body: JSON.stringify({ ...form, randomMode, randomCount: form.randomCount, randomSourceType: form.randomSourceType }),
     });
     setCreating(false);
     setRandomMode(false);
-    setForm({ title: "", description: "", timeLimit: 30, passPercentage: 60, assignToAll: true, assignedUserIds: [], questionIds: [], randomCount: 60 });
+    setForm({ title: "", description: "", timeLimit: 30, passPercentage: 60, assignToAll: true, assignedUserIds: [], questionIds: [], bookIds: [], randomCount: 60, randomSourceType: "all" });
     setSaving(false);
     fetchAll();
   }
@@ -305,17 +315,64 @@ export default function AdminTestsPage() {
                   Random Mode — pick questions randomly per attempt
                 </label>
                 {randomMode && (
-                  <div className="mt-2 flex items-center gap-2 text-sm text-gray-600">
-                    <span>Show</span>
-                    <input type="number" min={1} max={500} value={form.randomCount}
-                      onChange={(e) => setForm({ ...form, randomCount: Number(e.target.value) })}
-                      className="border border-gray-300 rounded px-2 py-1 w-20 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    <span>random questions (mixed easy / medium / hard)</span>
+                  <div className="mt-3 space-y-3">
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <span>Show</span>
+                      <input type="number" min={1} max={500} value={form.randomCount}
+                        onChange={(e) => setForm({ ...form, randomCount: Number(e.target.value) })}
+                        className="border border-gray-300 rounded px-2 py-1 w-20 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <span>random questions per attempt</span>
+                    </div>
+
+                    {/* Pool source */}
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 mb-1.5">Pick questions from:</p>
+                      <div className="flex flex-col gap-1.5">
+                        {(["all", "books", "questions"] as const).map((type) => (
+                          <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="radio" name="randomSourceType" value={type}
+                              checked={form.randomSourceType === type}
+                              onChange={() => setForm({ ...form, randomSourceType: type, bookIds: [], questionIds: [] })}
+                              className="rounded-full" />
+                            {type === "all" && "All approved questions"}
+                            {type === "books" && "Specific book(s)"}
+                            {type === "questions" && "Specific questions (hand-picked pool)"}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Book picker */}
+                    {form.randomSourceType === "books" && (
+                      <div className="border border-gray-200 rounded-lg p-3 max-h-36 overflow-y-auto space-y-1">
+                        {books.map((b) => (
+                          <label key={b.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" checked={form.bookIds.includes(b.id)} onChange={() => toggleBook(b.id)} className="rounded" />
+                            <span className="text-gray-700">{b.title}</span>
+                          </label>
+                        ))}
+                        {books.length === 0 && <p className="text-gray-400 text-xs">No books available.</p>}
+                      </div>
+                    )}
+
+                    {/* Question pool picker */}
+                    {form.randomSourceType === "questions" && (
+                      <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
+                        <p className="text-xs text-gray-400 mb-1">{form.questionIds.length} selected as pool</p>
+                        {questions.map((q) => (
+                          <label key={q.id} className="flex items-start gap-2 text-sm cursor-pointer">
+                            <input type="checkbox" checked={form.questionIds.includes(q.id)} onChange={() => toggleQ(q.id)} className="rounded mt-0.5" />
+                            <span className="text-gray-700">{q.questionText.slice(0, 80)}… <span className="text-gray-400 text-xs">({q.book.title})</span></span>
+                          </label>
+                        ))}
+                        {questions.length === 0 && <p className="text-gray-400 text-xs">No approved questions available.</p>}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Questions — hidden when random mode */}
+              {/* Questions — only shown for non-random mode */}
               {!randomMode && (
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-2 block">
