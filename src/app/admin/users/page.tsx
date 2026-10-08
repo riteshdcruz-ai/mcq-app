@@ -7,6 +7,7 @@ type BulkResult = { created: number; skipped: number; errors: string[] };
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [userSearch, setUserSearch] = useState("");
   const [me, setMe] = useState<{ name: string } | null>(null);
   const [form, setForm] = useState({ email: "", name: "", password: "", role: "resource" });
   const [loading, setLoading] = useState(false);
@@ -89,11 +90,13 @@ export default function AdminUsersPage() {
     setBulkLoading(true);
     setBulkResult(null);
 
+    // Parse textarea: each line is "Full Name, email@example.com" or tab-separated
     const rows = bulkText
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
+        // Support tab (Excel paste) or comma separation
         const sep = line.includes("\t") ? "\t" : ",";
         const parts = line.split(sep).map((p) => p.trim());
         return { name: parts[0] || "", email: parts[1] || "" };
@@ -232,6 +235,7 @@ export default function AdminUsersPage() {
                 </div>
               </form>
 
+              {/* Results */}
               {bulkResult && (
                 <div className={`mt-4 rounded-lg px-4 py-3 text-sm ${bulkResult.errors.length > 0 ? "bg-amber-50 border border-amber-200" : "bg-green-50 border border-green-200"}`}>
                   <p className="font-semibold text-gray-700 mb-1">
@@ -251,6 +255,14 @@ export default function AdminUsersPage() {
 
         {/* Users table */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-4 pt-4 pb-2">
+            <input
+              placeholder="Search by name or email..."
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50 text-gray-400 text-xs uppercase">
@@ -262,7 +274,7 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {users.filter((u) => !userSearch || u.name.toLowerCase().includes(userSearch.toLowerCase()) || u.email.toLowerCase().includes(userSearch.toLowerCase())).map((u) => (
                 <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="px-6 py-3 font-medium text-gray-800">{u.name}</td>
                   <td className="px-6 py-3 text-gray-600">{u.email}</td>

@@ -30,6 +30,10 @@ export default async function DashboardPage() {
           select: { id: true, status: true, score: true, totalQuestions: true, submittedAt: true },
           orderBy: { startedAt: "desc" },
         },
+        slots: {
+          include: { slotUsers: { where: { userId: session.userId } } },
+          orderBy: { startsAt: "asc" },
+        },
       },
       orderBy: { publishedAt: "desc" },
     }),
@@ -40,10 +44,32 @@ export default async function DashboardPage() {
   ]);
 
   const retakeGrantedSet = new Set(retakePerms.map((p) => p.testId));
+  const now = new Date();
+
+  // For tests with slots: only show if user has a slot; split into open vs upcoming
+  const visibleTests = tests.filter((t) => {
+    if (t.slots.length === 0) return true;
+    const userSlot = t.slots.find((s) => s.slotUsers.length > 0);
+    return !!userSlot; // hide if user has no slot at all
+  });
+
+  const upcomingTests = visibleTests
+    .filter((t) => {
+      if (t.slots.length === 0) return false;
+      const userSlot = t.slots.find((s) => s.slotUsers.length > 0)!;
+      return userSlot.startsAt > now;
+    })
+    .map((t) => ({ ...t, slotStartsAt: t.slots.find((s) => s.slotUsers.length > 0)!.startsAt }));
+
+  const openTests = visibleTests.filter((t) => {
+    if (t.slots.length === 0) return true;
+    const userSlot = t.slots.find((s) => s.slotUsers.length > 0)!;
+    return userSlot.startsAt <= now;
+  });
 
   // Latest attempt determines pending vs completed; tests with an active retake appear in pending
-  const submitted = tests.filter((t) => t.attempts[0]?.status === "submitted");
-  const pending = tests.filter((t) => !t.attempts[0] || t.attempts[0].status !== "submitted");
+  const submitted = openTests.filter((t) => t.attempts[0]?.status === "submitted");
+  const pending = openTests.filter((t) => !t.attempts[0] || t.attempts[0].status !== "submitted");
 
   return (
     <>
@@ -53,7 +79,7 @@ export default async function DashboardPage() {
         <p className="text-gray-500 mb-8">{session.email}</p>
 
         <div className="grid grid-cols-3 gap-4 mb-10">
-          <Stat label="Assigned Tests" value={tests.length} />
+          <Stat label="Assigned Tests" value={openTests.length + upcomingTests.length} />
           <Stat label="Completed" value={submitted.length} />
           <Stat label="Pending" value={pending.length} />
         </div>
@@ -80,7 +106,18 @@ export default async function DashboardPage() {
           </section>
         )}
 
-        {tests.length === 0 && (
+        {upcomingTests.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-700 mb-3">Upcoming Tests</h2>
+            <div className="space-y-3">
+              {upcomingTests.map((t) => (
+                <UpcomingCard key={t.id} test={t} slotStartsAt={t.slotStartsAt} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {openTests.length === 0 && upcomingTests.length === 0 && (
           <div className="text-center py-20 text-gray-400">No tests assigned yet.</div>
         )}
       </main>
@@ -114,6 +151,28 @@ function TestCard({ test }: { test: { id: string; title: string; description: st
       >
         Start
       </Link>
+    </div>
+  );
+}
+
+function UpcomingCard({ test, slotStartsAt }: { test: { id: string; title: string; description: string; timeLimit: number; _count: { testQuestions: number } }; slotStartsAt: Date }) {
+  const formatted = slotStartsAt.toLocaleString(undefined, {
+    weekday: "short", day: "numeric", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+  return (
+    <div className="bg-white rounded-xl border border-amber-200 p-5 shadow-sm flex items-center justify-between">
+      <div>
+        <h3 className="font-semibold text-gray-800">{test.title}</h3>
+        {test.description && <p className="text-sm text-gray-500 mt-0.5">{test.description}</p>}
+        <div className="flex gap-4 mt-2 text-xs text-gray-400">
+          <span>{test.timeLimit} min</span>
+        </div>
+      </div>
+      <div className="text-right shrink-0 ml-4">
+        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 block mb-1">Scheduled</span>
+        <span className="text-xs text-gray-500">Starts {formatted}</span>
+      </div>
     </div>
   );
 }

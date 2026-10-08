@@ -21,6 +21,7 @@ model User {
   assignments       TestAssignment[]
   attempts          TestAttempt[]
   retakePermissions UserTestRetakePermission[]
+  slotUsers         TestSlotUser[]
 }
 
 model Book {
@@ -88,6 +89,7 @@ model Test {
   assignments       TestAssignment[]
   attempts          TestAttempt[]
   retakePermissions UserTestRetakePermission[]
+  slots             TestSlot[]
 }
 
 model TestQuestion {
@@ -134,6 +136,27 @@ model UserTestRetakePermission {
   createdAt DateTime @default(now())
 
   @@unique([userId, testId])
+}
+
+model TestSlot {
+  id        String        @id @default(cuid())
+  testId    String
+  test      Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
+  label     String        @default("")
+  startsAt  DateTime
+  createdAt DateTime      @default(now())
+
+  slotUsers TestSlotUser[]
+}
+
+model TestSlotUser {
+  id     String   @id @default(cuid())
+  slotId String
+  slot   TestSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  userId String
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([slotId, userId])
 }
 
 model TestAttemptAnswer {

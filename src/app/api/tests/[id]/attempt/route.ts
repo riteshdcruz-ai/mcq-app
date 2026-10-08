@@ -76,9 +76,27 @@ export async function POST(
     // No in-progress attempt — check retake permission before creating a new one
     const test = await prisma.test.findUnique({
       where: { id: testId },
-      include: { testQuestions: true, testBooks: true },
+      include: {
+        testQuestions: true,
+        testBooks: true,
+        slots: { include: { slotUsers: { where: { userId: session.userId } } } },
+      },
     });
     if (!test) return NextResponse.json({ error: "Test not found" }, { status: 404 });
+
+    // Slot time gate
+    if (test.slots.length > 0) {
+      const userSlot = test.slots.find((s) => s.slotUsers.length > 0);
+      if (!userSlot) {
+        return NextResponse.json({ error: "You are not scheduled for this exam" }, { status: 403 });
+      }
+      if (userSlot.startsAt > new Date()) {
+        return NextResponse.json({
+          error: `Your exam slot starts at ${userSlot.startsAt.toISOString()}`,
+          startsAt: userSlot.startsAt,
+        }, { status: 403 });
+      }
+    }
 
     if (!test.allowRetake) {
       const prior = await prisma.testAttempt.findFirst({

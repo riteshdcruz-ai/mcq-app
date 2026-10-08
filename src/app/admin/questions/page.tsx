@@ -39,6 +39,7 @@ export default function AdminQuestionsPage() {
   const [editQ, setEditQ] = useState<Question | null>(null);
 
   const [tab, setTab] = useState<"pending" | "approved">("pending");
+  const [bookFilter, setBookFilter] = useState("");
 
   async function fetchData() {
     const [booksRes, qRes] = await Promise.all([
@@ -120,8 +121,8 @@ export default function AdminQuestionsPage() {
     fetchData();
   }
 
-  const pending = questions.filter((q) => !q.approved);
-  const approved = questions.filter((q) => q.approved);
+  const pending = questions.filter((q) => !q.approved && (!bookFilter || q.bookId === bookFilter));
+  const approved = questions.filter((q) => q.approved && (!bookFilter || q.bookId === bookFilter));
   const displayed = tab === "pending" ? pending : approved;
 
   return (
@@ -186,14 +187,22 @@ export default function AdminQuestionsPage() {
           )}
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-4">
+        {/* Tabs + book filter */}
+        <div className="flex flex-wrap items-center gap-2 mb-4">
           {(["pending", "approved"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition ${tab === t ? "bg-blue-700 text-white" : "bg-white border border-gray-200 text-gray-600 hover:border-blue-300"}`}>
-              {t === "pending" ? `Pending Approval (${pending.length})` : `Approved (${approved.length})`}
+              {t === "pending" ? `Pending (${pending.length})` : `Approved (${approved.length})`}
             </button>
           ))}
+          <select
+            value={bookFilter}
+            onChange={(e) => setBookFilter(e.target.value)}
+            className="ml-auto border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All books</option>
+            {books.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
+          </select>
         </div>
 
         {/* Questions list */}

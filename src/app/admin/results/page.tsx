@@ -18,6 +18,7 @@ export default function AdminResultsPage() {
   const [results, setResults] = useState<Attempt[]>([]);
   const [me, setMe] = useState<{ name: string } | null>(null);
   const [filter, setFilter] = useState("");
+  const [testFilter, setTestFilter] = useState("");
   const [exporting, setExporting] = useState(false);
   const [permissions, setPermissions] = useState<Set<string>>(new Set());
 
@@ -78,17 +79,20 @@ export default function AdminResultsPage() {
     setExporting(false);
   }
 
-  const filtered = results.filter(
-    (r) =>
+  const uniqueTests = Array.from(new Map(results.map((r) => [r.testId, r.test.title])).entries());
+
+  const filtered = results.filter((r) =>
+    (!testFilter || r.testId === testFilter) &&
+    (!filter ||
       r.user.name.toLowerCase().includes(filter.toLowerCase()) ||
       r.user.email.toLowerCase().includes(filter.toLowerCase()) ||
-      r.test.title.toLowerCase().includes(filter.toLowerCase())
+      r.test.title.toLowerCase().includes(filter.toLowerCase()))
   );
 
-  const avgPct = results.length
-    ? Math.round(results.reduce((s, r) => s + (r.totalQuestions > 0 ? (r.score / r.totalQuestions) * 100 : 0), 0) / results.length)
+  const avgPct = filtered.length
+    ? Math.round(filtered.reduce((s, r) => s + (r.totalQuestions > 0 ? (r.score / r.totalQuestions) * 100 : 0), 0) / filtered.length)
     : 0;
-  const passed = results.filter((r) => r.totalQuestions > 0 && (r.score / r.totalQuestions) * 100 >= (r.test.passPercentage ?? 60)).length;
+  const passed = filtered.filter((r) => r.totalQuestions > 0 && (r.score / r.totalQuestions) * 100 >= (r.test.passPercentage ?? 60)).length;
 
   return (
     <>
@@ -105,7 +109,7 @@ export default function AdminResultsPage() {
         {/* Stats */}
         <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-xl border border-gray-200 p-5 text-center shadow-sm">
-            <div className="text-3xl font-bold text-blue-700">{results.length}</div>
+            <div className="text-3xl font-bold text-blue-700">{filtered.length}</div>
             <div className="text-sm text-gray-500 mt-1">Total Submissions</div>
           </div>
           <div className="bg-white rounded-xl border border-gray-200 p-5 text-center shadow-sm">
@@ -118,13 +122,23 @@ export default function AdminResultsPage() {
           </div>
         </div>
 
-        {/* Filter */}
-        <input
-          placeholder="Search by name, email or test..."
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        {/* Filters */}
+        <div className="flex gap-3 mb-4 flex-wrap">
+          <select
+            value={testFilter}
+            onChange={(e) => { setTestFilter(e.target.value); setFilter(""); }}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-48"
+          >
+            <option value="">All tests</option>
+            {uniqueTests.map(([id, title]) => <option key={id} value={id}>{title}</option>)}
+          </select>
+          <input
+            placeholder="Search by name or email..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="flex-1 border border-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
 
         {/* Table */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-auto max-h-[65vh]">

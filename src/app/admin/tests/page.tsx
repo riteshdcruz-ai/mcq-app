@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import Nav from "@/components/Nav";
 
 type Test = { id: string; title: string; description: string; timeLimit: number; randomMode: boolean; randomCount: number; published: boolean; allowRetake: boolean; passPercentage: number; createdAt: string; createdBy: { name: string }; _count: { testQuestions: number; attempts: number } };
+type SlotUser = { id: string; name: string; email: string };
+type Slot = { id: string; label: string; startsAt: string; slotUsers: { userId: string; user: SlotUser }[] };
 type User = { id: string; name: string; email: string; role: string };
 type Question = { id: string; questionText: string; book: { title: string }; approved: boolean };
 type Book = { id: string; title: string };
@@ -21,6 +23,16 @@ export default function AdminTestsPage() {
   const [assignForm, setAssignForm] = useState<{ assignedToAll: boolean; userIds: string[] }>({ assignedToAll: true, userIds: [] });
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignFilter, setAssignFilter] = useState("");
+
+  // Slots state
+  const [slotsTest, setSlotsTest] = useState<Test | null>(null);
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [newSlot, setNewSlot] = useState({ label: "", startsAt: "" });
+  const [slotSaving, setSlotSaving] = useState(false);
+  const [activeSlotId, setActiveSlotId] = useState<string | null>(null);
+  const [slotUserSearch, setSlotUserSearch] = useState("");
+  const [pendingSlotUsers, setPendingSlotUsers] = useState<string[]>([]);
+  const [slotUserSaving, setSlotUserSaving] = useState(false);
 
   async function fetchAll() {
     const [t, u, q, b] = await Promise.all([
@@ -105,6 +117,61 @@ export default function AdminTestsPage() {
       ...f,
       userIds: f.userIds.includes(uid) ? f.userIds.filter((x) => x !== uid) : [...f.userIds, uid],
     }));
+  }
+
+  async function openSlotsModal(test: Test) {
+    setSlotsTest(test);
+    setActiveSlotId(null);
+    setNewSlot({ label: "", startsAt: "" });
+    setSlotUserSearch("");
+    const data = await fetch(`/api/admin/tests/${test.id}/slots`).then((r) => r.json());
+    setSlots(data);
+  }
+
+  async function addSlot() {
+    if (!slotsTest || !newSlot.startsAt) return;
+    setSlotSaving(true);
+    await fetch(`/api/admin/tests/${slotsTest.id}/slots`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: newSlot.label, startsAt: newSlot.startsAt }),
+    });
+    const data = await fetch(`/api/admin/tests/${slotsTest.id}/slots`).then((r) => r.json());
+    setSlots(data);
+    setNewSlot({ label: "", startsAt: "" });
+    setSlotSaving(false);
+  }
+
+  async function deleteSlot(slotId: string) {
+    if (!slotsTest || !confirm("Delete this slot and all its user assignments?")) return;
+    await fetch(`/api/admin/tests/${slotsTest.id}/slots`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slotId }),
+    });
+    const data = await fetch(`/api/admin/tests/${slotsTest.id}/slots`).then((r) => r.json());
+    setSlots(data);
+    if (activeSlotId === slotId) setActiveSlotId(null);
+  }
+
+  function openSlotUsers(slot: Slot) {
+    setActiveSlotId(slot.id);
+    setPendingSlotUsers(slot.slotUsers.map((su) => su.userId));
+    setSlotUserSearch("");
+  }
+
+  async function saveSlotUsers() {
+    if (!activeSlotId || !slotsTest) return;
+    setSlotUserSaving(true);
+    await fetch(`/api/admin/slots/${activeSlotId}/users`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds: pendingSlotUsers }),
+    });
+    const data = await fetch(`/api/admin/tests/${slotsTest.id}/slots`).then((r) => r.json());
+    setSlots(data);
+    setActiveSlotId(null);
+    setSlotUserSaving(false);
   }
 
   async function createTest(e: React.FormEvent) {
@@ -194,6 +261,7 @@ export default function AdminTestsPage() {
                   </td>
                   <td className="px-6 py-3 text-right flex gap-3 justify-end">
                     <button onClick={() => openAssignModal(t)} className="text-blue-500 hover:text-blue-700 text-xs font-medium">Assign</button>
+                    <button onClick={() => openSlotsModal(t)} className="text-purple-600 hover:text-purple-800 text-xs font-medium">Slots</button>
                     <button onClick={() => togglePublish(t)} className={`text-xs font-medium ${t.published ? "text-orange-500 hover:text-orange-700" : "text-green-600 hover:text-green-800"}`}>
                       {t.published ? "Unpublish" : "Publish"}
                     </button>
@@ -208,6 +276,119 @@ export default function AdminTestsPage() {
           </table>
         </div>
       </main>
+
+      {/* Slots modal */}
+      {slotsTest && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg">Exam Slots</h3>
+                <p className="text-sm text-gray-500">{slotsTest.title}</p>
+              </div>
+              <button onClick={() => { setSlotsTest(null); setActiveSlotId(null); }} className="text-gray-400 hover:text-gray-600 text-lg font-bold">✕</button>
+            </div>
+
+            {/* Existing slots */}
+            {slots.length === 0 && (
+              <p className="text-sm text-gray-400 mb-4">No slots yet. Add one below to schedule exam access by time.</p>
+            )}
+            <div className="space-y-3 mb-5">
+              {slots.map((slot) => (
+                <div key={slot.id} className="border border-gray-200 rounded-xl p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-800 text-sm">{slot.label || "Unnamed slot"}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Starts: {new Date(slot.startsAt).toLocaleString()} · {slot.slotUsers.length} user{slot.slotUsers.length !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => activeSlotId === slot.id ? setActiveSlotId(null) : openSlotUsers(slot)}
+                        className="text-xs font-medium px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition"
+                      >
+                        {activeSlotId === slot.id ? "Close" : "Assign Users"}
+                      </button>
+                      <button onClick={() => deleteSlot(slot.id)} className="text-xs text-red-400 hover:text-red-600 font-medium">Delete</button>
+                    </div>
+                  </div>
+
+                  {/* Inline user assignment for this slot */}
+                  {activeSlotId === slot.id && (
+                    <div className="mt-3 border-t border-gray-100 pt-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs text-gray-500">{pendingSlotUsers.length} selected</span>
+                        <div className="flex gap-3 text-xs">
+                          <button onClick={() => setPendingSlotUsers(users.map((u) => u.id))} className="text-blue-600 hover:underline">Select all</button>
+                          <button onClick={() => setPendingSlotUsers([])} className="text-gray-500 hover:underline">Clear</button>
+                        </div>
+                      </div>
+                      <input
+                        placeholder="Search users..."
+                        value={slotUserSearch}
+                        onChange={(e) => setSlotUserSearch(e.target.value)}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <div className="border border-gray-100 rounded-lg p-2 max-h-48 overflow-y-auto space-y-0.5">
+                        {users
+                          .filter((u) => !slotUserSearch || u.name.toLowerCase().includes(slotUserSearch.toLowerCase()) || u.email.toLowerCase().includes(slotUserSearch.toLowerCase()))
+                          .map((u) => (
+                            <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer py-0.5">
+                              <input
+                                type="checkbox"
+                                checked={pendingSlotUsers.includes(u.id)}
+                                onChange={() => setPendingSlotUsers((prev) => prev.includes(u.id) ? prev.filter((x) => x !== u.id) : [...prev, u.id])}
+                                className="rounded"
+                              />
+                              <span className="text-gray-800">{u.name}</span>
+                              <span className="text-gray-400 text-xs">{u.email}</span>
+                            </label>
+                          ))}
+                        {users.length === 0 && <p className="text-gray-400 text-xs px-1">No resource users found.</p>}
+                      </div>
+                      <div className="flex gap-2 justify-end mt-3">
+                        <button onClick={() => setActiveSlotId(null)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition">Cancel</button>
+                        <button onClick={saveSlotUsers} disabled={slotUserSaving} className="px-4 py-1.5 text-sm bg-blue-700 text-white rounded-lg font-medium hover:bg-blue-800 disabled:opacity-60 transition">
+                          {slotUserSaving ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add new slot */}
+            <div className="border border-dashed border-gray-300 rounded-xl p-4">
+              <p className="text-xs font-medium text-gray-500 mb-3 uppercase tracking-wide">Add Slot</p>
+              <div className="flex flex-col gap-2">
+                <input
+                  placeholder='Label, e.g. "Slot A" or "Morning Batch"'
+                  value={newSlot.label}
+                  onChange={(e) => setNewSlot({ ...newSlot, label: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <div className="flex gap-2">
+                  <input
+                    type="datetime-local"
+                    value={newSlot.startsAt}
+                    onChange={(e) => setNewSlot({ ...newSlot, startsAt: e.target.value })}
+                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  <button
+                    onClick={addSlot}
+                    disabled={slotSaving || !newSlot.startsAt}
+                    className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white text-sm font-medium rounded-lg transition disabled:opacity-60"
+                  >
+                    {slotSaving ? "Adding..." : "Add Slot"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Assign modal */}
       {assigningTest && (
