@@ -11,9 +11,10 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const exportXlsx = searchParams.get("export") === "xlsx";
+  const testId = searchParams.get("testId") || undefined;
 
   const attempts = await prisma.testAttempt.findMany({
-    where: { status: "submitted" },
+    where: { status: "submitted", ...(testId ? { testId } : {}) },
     include: {
       user: { select: { name: true, email: true } },
       test: { select: { title: true, passPercentage: true } },
@@ -35,8 +36,7 @@ export async function GET(req: NextRequest) {
     const buffer = await exportResultsToExcel(rows);
     return new NextResponse(buffer as unknown as BodyInit, {
       headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="mcq-results-${Date.now()}.xlsx"`,
       },
     });

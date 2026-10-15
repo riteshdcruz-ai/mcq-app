@@ -68,12 +68,17 @@ export default function AdminResultsPage() {
 
   async function exportXlsx() {
     setExporting(true);
-    const res = await fetch("/api/admin/results?export=xlsx");
+    const params = new URLSearchParams({ export: "xlsx" });
+    if (testFilter) params.set("testId", testFilter);
+    const res = await fetch(`/api/admin/results?${params.toString()}`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `mcq-results-${new Date().toISOString().split("T")[0]}.xlsx`;
+    const testName = testFilter
+      ? (uniqueTests.find(([id]) => id === testFilter)?.[1] ?? "test").replace(/\s+/g, "_")
+      : "all";
+    a.download = `mcq-results-${testName}-${new Date().toISOString().split("T")[0]}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
     setExporting(false);
@@ -102,7 +107,7 @@ export default function AdminResultsPage() {
           <h1 className="text-2xl font-bold text-gray-800">Results</h1>
           <button onClick={exportXlsx} disabled={exporting}
             className="bg-green-700 hover:bg-green-800 text-white px-5 py-2 rounded-lg text-sm font-medium transition disabled:opacity-60">
-            {exporting ? "Exporting..." : "Export to Excel"}
+            {exporting ? "Exporting..." : testFilter ? "Download Selected Test" : "Download All Results"}
           </button>
         </div>
 

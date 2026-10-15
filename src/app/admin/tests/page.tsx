@@ -24,6 +24,30 @@ export default function AdminTestsPage() {
   const [assignSaving, setAssignSaving] = useState(false);
   const [assignFilter, setAssignFilter] = useState("");
 
+  // Edit test state
+  const [editingTest, setEditingTest] = useState<Test | null>(null);
+  const [editForm, setEditForm] = useState({ title: "", description: "", timeLimit: 30, passPercentage: 60 });
+  const [editSaving, setEditSaving] = useState(false);
+
+  function openEditModal(test: Test) {
+    setEditingTest(test);
+    setEditForm({ title: test.title, description: test.description, timeLimit: test.timeLimit, passPercentage: test.passPercentage });
+  }
+
+  async function saveEditTest(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingTest) return;
+    setEditSaving(true);
+    await fetch("/api/admin/tests", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editingTest.id, title: editForm.title.trim(), description: editForm.description, timeLimit: editForm.timeLimit, passPercentage: editForm.passPercentage }),
+    });
+    setEditSaving(false);
+    setEditingTest(null);
+    fetchAll();
+  }
+
   // Slots state
   const [slotsTest, setSlotsTest] = useState<Test | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -260,6 +284,7 @@ export default function AdminTestsPage() {
                     </button>
                   </td>
                   <td className="px-6 py-3 text-right flex gap-3 justify-end">
+                    <button onClick={() => openEditModal(t)} className="text-gray-500 hover:text-gray-700 text-xs font-medium">Edit</button>
                     <button onClick={() => openAssignModal(t)} className="text-blue-500 hover:text-blue-700 text-xs font-medium">Assign</button>
                     <button onClick={() => openSlotsModal(t)} className="text-purple-600 hover:text-purple-800 text-xs font-medium">Slots</button>
                     <button onClick={() => togglePublish(t)} className={`text-xs font-medium ${t.published ? "text-orange-500 hover:text-orange-700" : "text-green-600 hover:text-green-800"}`}>
@@ -276,6 +301,61 @@ export default function AdminTestsPage() {
           </table>
         </div>
       </main>
+
+      {/* Edit test modal */}
+      {editingTest && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+            <h3 className="font-bold text-gray-800 text-lg mb-4">Edit Test</h3>
+            <form onSubmit={saveEditTest} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Title</label>
+                <input
+                  required
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-1 block">Description</label>
+                <textarea
+                  rows={2}
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Time limit (min)</label>
+                  <input
+                    type="number" min={1} max={180}
+                    value={editForm.timeLimit}
+                    onChange={(e) => setEditForm({ ...editForm, timeLimit: Number(e.target.value) })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Pass percentage (%)</label>
+                  <input
+                    type="number" min={1} max={100}
+                    value={editForm.passPercentage}
+                    onChange={(e) => setEditForm({ ...editForm, passPercentage: Number(e.target.value) })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end pt-1">
+                <button type="button" onClick={() => setEditingTest(null)} className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                <button type="submit" disabled={editSaving} className="px-5 py-2 rounded-lg bg-blue-700 text-white text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
+                  {editSaving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Slots modal */}
       {slotsTest && (
