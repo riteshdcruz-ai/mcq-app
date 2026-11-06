@@ -39,7 +39,24 @@ export default function AdminQuestionsPage() {
   const [editQ, setEditQ] = useState<Question | null>(null);
 
   const [tab, setTab] = useState<"pending" | "approved">("pending");
-  const [bookFilter, setBookFilter] = useState("");
+  const [bookFilters, setBookFilters] = useState<string[]>([]);
+  const [bookDropOpen, setBookDropOpen] = useState(false);
+
+  function toggleBookFilter(id: string) {
+    setBookFilters((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
+
+  function buildExportUrl() {
+    const params = new URLSearchParams();
+    if (bookFilters.length) params.set("bookIds", bookFilters.join(","));
+    return `/api/admin/questions/export?${params.toString()}`;
+  }
+
+  function buildPrintUrl() {
+    const params = new URLSearchParams();
+    if (bookFilters.length) params.set("bookIds", bookFilters.join(","));
+    return `/admin/questions/print?${params.toString()}`;
+  }
 
   async function fetchData() {
     const [booksRes, qRes] = await Promise.all([
@@ -121,8 +138,8 @@ export default function AdminQuestionsPage() {
     fetchData();
   }
 
-  const pending = questions.filter((q) => !q.approved && (!bookFilter || q.bookId === bookFilter));
-  const approved = questions.filter((q) => q.approved && (!bookFilter || q.bookId === bookFilter));
+  const pending = questions.filter((q) => !q.approved && (!bookFilters.length || bookFilters.includes(q.bookId)));
+  const approved = questions.filter((q) => q.approved && (!bookFilters.length || bookFilters.includes(q.bookId)));
   const displayed = tab === "pending" ? pending : approved;
 
   return (
@@ -133,13 +150,13 @@ export default function AdminQuestionsPage() {
           <h1 className="text-2xl font-bold text-gray-800">Questions</h1>
           <div className="flex gap-2">
             <a
-              href="/api/admin/questions/export"
+              href={buildExportUrl()}
               className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
             >
               Export CSV
             </a>
             <a
-              href="/admin/questions/print"
+              href={buildPrintUrl()}
               target="_blank"
               rel="noreferrer"
               className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
@@ -195,14 +212,42 @@ export default function AdminQuestionsPage() {
               {t === "pending" ? `Pending (${pending.length})` : `Approved (${approved.length})`}
             </button>
           ))}
-          <select
-            value={bookFilter}
-            onChange={(e) => setBookFilter(e.target.value)}
-            className="ml-auto border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All books</option>
-            {books.map((b) => <option key={b.id} value={b.id}>{b.title}</option>)}
-          </select>
+          <div className="ml-auto relative">
+            <button
+              onClick={() => setBookDropOpen((o) => !o)}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-gray-600 bg-white hover:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 min-w-40"
+            >
+              <span className="flex-1 text-left">
+                {bookFilters.length === 0 ? "All books" : `${bookFilters.length} book${bookFilters.length > 1 ? "s" : ""} selected`}
+              </span>
+              <span className="text-gray-400 text-xs">{bookDropOpen ? "▲" : "▼"}</span>
+            </button>
+            {bookDropOpen && (
+              <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-xl shadow-lg z-30 p-2">
+                <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={bookFilters.length === 0}
+                    onChange={() => setBookFilters([])}
+                    className="rounded"
+                  />
+                  All books
+                </label>
+                <div className="border-t border-gray-100 my-1" />
+                {books.map((b) => (
+                  <label key={b.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={bookFilters.includes(b.id)}
+                      onChange={() => toggleBookFilter(b.id)}
+                      className="rounded"
+                    />
+                    {b.title}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Questions list */}

@@ -3,22 +3,27 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import PrintButton from "./PrintButton";
 
-export default async function PrintQuestionsPage() {
+export default async function PrintQuestionsPage({ searchParams }: { searchParams: Promise<{ bookIds?: string }> }) {
   const session = await getSession();
   if (!session || session.role !== "admin") redirect("/login");
 
+  const { bookIds: bookIdsParam } = await searchParams;
+  const bookIds = bookIdsParam ? bookIdsParam.split(",").filter(Boolean) : [];
+
   const questions = await prisma.question.findMany({
-    where: { approved: true },
+    where: { approved: true, ...(bookIds.length ? { bookId: { in: bookIds } } : {}) },
     include: { book: { select: { title: true } } },
     orderBy: [{ book: { title: "asc" } }, { createdAt: "asc" }],
   });
+
+  const subtitle = bookIds.length === 0 ? "All books" : `${questions.length} questions from ${bookIds.length} book${bookIds.length > 1 ? "s" : ""}`;
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-8 print:px-0 print:py-0">
       <div className="flex items-center justify-between mb-6 print:hidden">
         <div>
           <h1 className="text-xl font-bold text-gray-800">Question Bank</h1>
-          <p className="text-sm text-gray-500">{questions.length} approved questions</p>
+          <p className="text-sm text-gray-500">{questions.length} approved questions · {subtitle}</p>
         </div>
         <PrintButton />
       </div>
